@@ -13,7 +13,7 @@ from ..utils import should_patch, patch_into
 
 
 @patch_into(pyrogram.client.Client)
-class Client(pyrogram.client.Client.on_callback_query()):
+class Client(pyrogram.client.Client):
     listeners: Dict[ListenerTypes, List[Listener]]
     old__init__: Callable
 
@@ -24,16 +24,16 @@ class Client(pyrogram.client.Client.on_callback_query()):
 
     @should_patch()
     async def listen(
-            self,
-            filters: Optional[Filter] = None,
-            listener_type: ListenerTypes = ListenerTypes.MESSAGE,
-            timeout: Optional[int] = None,
-            unallowed_click_alert: bool = True,
-            chat_id: Union[Union[int, str], List[Union[int, str]]] = None,
-            user_id: Union[Union[int, str], List[Union[int, str]]] = None,
-            message_id: Union[int, List[int]] = None,
-            inline_message_id: Union[str, List[str]] = None,
-    ) -> Message | CallbackQuery:
+        self,
+        filters: Optional[Filter] = None,
+        listener_type: ListenerTypes = ListenerTypes.MESSAGE,
+        timeout: Optional[int] = None,
+        unallowed_click_alert: bool = True,
+        chat_id: Union[Union[int, str], List[Union[int, str]]] = None,
+        user_id: Union[Union[int, str], List[Union[int, str]]] = None,
+        message_id: Union[int, List[int]] = None,
+        inline_message_id: Union[str, List[str]] = None,
+    ):
         pattern = Identifier(
             from_user_id=user_id,
             chat_id=chat_id,
@@ -71,18 +71,18 @@ class Client(pyrogram.client.Client.on_callback_query()):
 
     @should_patch()
     async def ask(
-            self,
-            chat_id: Union[Union[int, str], List[Union[int, str]]],
-            text: str,
-            filters: Optional[Filter] = None,
-            listener_type: ListenerTypes = ListenerTypes.MESSAGE,
-            timeout: Optional[int] = None,
-            unallowed_click_alert: bool = True,
-            user_id: Union[Union[int, str], List[Union[int, str]]] = None,
-            message_id: Union[int, List[int]] = None,
-            inline_message_id: Union[str, List[str]] = None,
-            *args,
-            **kwargs,
+        self,
+        chat_id: Union[Union[int, str], List[Union[int, str]]],
+        text: str,
+        filters: Optional[Filter] = None,
+        listener_type: ListenerTypes = ListenerTypes.MESSAGE,
+        timeout: Optional[int] = None,
+        unallowed_click_alert: bool = True,
+        user_id: Union[Union[int, str], List[Union[int, str]]] = None,
+        message_id: Union[int, List[int]] = None,
+        inline_message_id: Union[str, List[str]] = None,
+        *args,
+        **kwargs,
     ):
         sent_message = None
         if text.strip() != "":

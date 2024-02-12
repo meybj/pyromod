@@ -10,7 +10,7 @@ from ..types import ListenerTypes, Identifier
 from ..utils import patch_into, should_patch
 
 
-@patch_into(pyrogram.types.messages_and_media.message.Message)
+@patch_into(pyrogram.handlers.message_handler.MessageHandler)
 class MessageHandler(pyrogram.handlers.message_handler.MessageHandler):
     filters: Filter
     old__init__: Callable
