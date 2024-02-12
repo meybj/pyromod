@@ -83,7 +83,7 @@ class Client(pyrogram.client.Client):
         inline_message_id: Union[str, List[str]] = None,
         *args,
         **kwargs,
-    ):
+    ) -> Message | CallbackQuery:
         sent_message = None
         if text.strip() != "":
             chat_to_ask = chat_id[0] if isinstance(chat_id, list) else chat_id
