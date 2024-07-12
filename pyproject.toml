@@ -1,9 +1,10 @@
 [project]
 name = "pyromod"
-version = "3.5"
+version = "3.6"
 description = "A monkeypatcher add-on for Pyrogram that does conversation handling"
 authors = [
-    { name = "Pauxis", email = "pauxiscezar@gmail.com" }
+    { name = "Pauxis", email = "pauxiscezar@gmail.com" },
+    { name = "Meybj", email = "8ddbhlymd@mozmail.com" }
 ]
 dependencies = [
     "pyrogram >= 1.0"
