@@ -79,8 +79,8 @@ class Message(_Message):
     async def ask_edit_text(
             self,
             text: str,
-            filters: Optional[Filter] = None,
-            listener_type: ListenerTypes = ListenerTypes.MESSAGE,
+            message_filters: Optional[Filter] = None,
+            callback_filters: Optional[Filter] = None,
             timeout: Optional[int] = None,
             unallowed_click_alert: bool = True,
             user_id: Union[Union[int, str], List[Union[int, str]]] = None,
@@ -89,21 +89,31 @@ class Message(_Message):
             *args,
             **kwargs,
     ):
+
+        message_task = asyncio.create_task(
+            self._client.listen(message_filters, ListenerTypes.MESSAGE, timeout, unallowed_click_alert,
+                                self.chat.id, user_id, message_id, inline_message_id))
+        callback_task = asyncio.create_task(
+            self._client.listen(callback_filters, ListenerTypes.CALLBACK_QUERY, timeout, unallowed_click_alert,
+                                self.chat.id, user_id, message_id, inline_message_id))
+
         sent_message = None
         if text.strip() != "":
             sent_message = await self.edit_text(text, *args, **kwargs)
 
-        response = await self._client.listen(
-            filters=filters,
-            listener_type=listener_type,
-            timeout=timeout,
-            unallowed_click_alert=unallowed_click_alert,
-            chat_id=self.chat.id,
-            user_id=user_id,
-            message_id=message_id,
-            inline_message_id=inline_message_id,
-        )
-        if response:
-            response.sent_message = sent_message
+        response, pending = await asyncio.wait([message_task, callback_task], timeout=timeout,
+                                               return_when=asyncio.FIRST_COMPLETED)
 
-        return response
+        for task in pending:
+            task.cancel()
+
+        for completed_task in response:
+            completed_task = completed_task.result()
+            if isinstance(completed_task, _Message):
+                if completed_task:
+                    completed_task.sent_message = sent_message
+                return completed_task
+            elif isinstance(completed_task, CallbackQuery):
+                return completed_task
+            else:
+                raise RuntimeError("Unexpected update type received")
