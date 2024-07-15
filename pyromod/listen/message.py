@@ -76,7 +76,22 @@ class Message(_Message):
                 raise RuntimeError("Unexpected update type received")
 
     @should_patch()
-    async def ask_edit_text(
+    async def ask_only(self,
+                       text: str,
+                       quote: bool | None = None,
+                       message_filters: Optional[Filter] = None,
+                       callback_filters: Optional[Filter] = None,
+                       timeout: Optional[int] = None,
+                       unallowed_click_alert: bool = True,
+                       inline_message_id: Union[str, List[str]] = None,
+                       **kwargs,
+                       ) -> _Message | CallbackQuery:
+
+        return await self.ask(text, quote, message_filters, callback_filters, timeout, unallowed_click_alert,
+                              self.from_user.id, self.id, inline_message_id, **kwargs)
+
+    @should_patch()
+    async def ask_edit(
             self,
             text: str,
             message_filters: Optional[Filter] = None,

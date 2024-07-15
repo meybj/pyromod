@@ -9,6 +9,7 @@ from .client import Client
 from ..config import config
 from ..types import ListenerTypes, Identifier, Listener
 from ..utils import patch_into, should_patch
+from ..exceptions import ListenerStopped
 
 
 @patch_into(pyrogram.handlers.callback_query_handler.CallbackQueryHandler)
@@ -128,7 +129,10 @@ class CallbackQueryHandler(pyrogram.handlers.callback_query_handler.CallbackQuer
             client.remove_listener(listener)
 
             if listener.future and not listener.future.done():
-                listener.future.set_result(query)
+                if not isinstance(query, ListenerStopped):
+                    listener.future.set_result(query)
+                else:
+                    listener.future.set_result(None)
 
                 raise pyrogram.StopPropagation
             elif listener.callback:

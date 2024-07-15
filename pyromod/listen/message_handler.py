@@ -8,6 +8,7 @@ from pyrogram.types import Message
 from .client import Client
 from ..types import ListenerTypes, Identifier
 from ..utils import patch_into, should_patch
+from ..exceptions import ListenerStopped
 
 
 @patch_into(pyrogram.handlers.message_handler.MessageHandler)
@@ -82,7 +83,12 @@ class MessageHandler(pyrogram.handlers.message_handler.MessageHandler):
             client.remove_listener(listener)
 
             if listener.future and not listener.future.done():
-                listener.future.set_result(message)
+                if not isinstance(message, ListenerStopped):
+                    print(message)
+                    listener.future.set_result(message)
+                else:
+                    print("None")
+                    listener.future.set_result(None)
 
                 raise pyrogram.StopPropagation
             elif listener.callback:
