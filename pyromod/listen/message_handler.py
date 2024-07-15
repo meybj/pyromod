@@ -84,10 +84,8 @@ class MessageHandler(pyrogram.handlers.message_handler.MessageHandler):
 
             if listener.future and not listener.future.done():
                 if not isinstance(message, ListenerStopped):
-                    print(message)
                     listener.future.set_result(message)
                 else:
-                    print("None")
                     listener.future.set_result(None)
 
                 raise pyrogram.StopPropagation
