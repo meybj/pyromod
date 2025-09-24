@@ -7,7 +7,7 @@ authors = [
     { name = "Meybj", email = "8ddbhlymd@mozmail.com" }
 ]
 dependencies = [
-    "pyrogram >= 1.0"
+    "kurigram>=2.2.12",
 ]
 readme = "README.md"
 requires-python = ">= 3.8"
