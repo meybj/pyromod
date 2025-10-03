@@ -1,8 +1,7 @@
-import asyncio
 from typing import Optional, Union, List
 
 from pyrogram.filters import Filter
-from pyrogram.types import Message as _Message, CallbackQuery
+from pyrogram.types import Message as _Message, CallbackQuery, ReplyParameters
 
 from .client import Client
 from ..types import ListenerTypes
@@ -36,66 +35,56 @@ class Message(_Message):
     @should_patch()
     async def ask(self,
                   text: str,
-                  quote: bool | None = None,
+                  quote: bool | None = False,
+                  filters: Optional[Filter] = None,
                   message_filters: Optional[Filter] = None,
                   callback_filters: Optional[Filter] = None,
+                  listener_type: Union[ListenerTypes, List[ListenerTypes]] = ListenerTypes.MESSAGE,
                   timeout: Optional[int] = None,
                   unallowed_click_alert: bool = True,
+                  reply_parameters: ReplyParameters = None,
                   user_id: Union[Union[int, str], List[Union[int, str]]] = None,
                   message_id: Union[int, List[int]] = None,
                   inline_message_id: Union[str, List[str]] = None,
                   **kwargs,
-                  ) -> _Message | CallbackQuery:
+                  ) -> Optional[Union[_Message, CallbackQuery]]:
 
-        message_task = asyncio.create_task(
-            self._client.listen(message_filters, ListenerTypes.MESSAGE, timeout, unallowed_click_alert,
-                                self.chat.id, user_id, message_id, inline_message_id))
-        callback_task = asyncio.create_task(
-            self._client.listen(callback_filters, ListenerTypes.CALLBACK_QUERY, timeout, unallowed_click_alert,
-                                self.chat.id, user_id, message_id, inline_message_id))
+        if reply_parameters is None and quote:
+            reply_parameters = ReplyParameters(
+                message_id=self.id
+            )
 
-        sent_message = None
-        if text.strip() != "":
-            sent_message = await self.reply_text(text, quote, **kwargs)
-
-        response, pending = await asyncio.wait([message_task, callback_task], timeout=timeout,
-                                               return_when=asyncio.FIRST_COMPLETED)
-
-        for task in pending:
-            task.cancel()
-
-        for completed_task in response:
-            completed_task = completed_task.result()
-            if isinstance(completed_task, _Message):
-                if completed_task:
-                    completed_task.sent_message = sent_message
-                return completed_task
-            elif isinstance(completed_task, CallbackQuery):
-                return completed_task
-            else:
-                raise RuntimeError("Unexpected update type received")
+        return await self._client.ask(self.chat.id, text, filters, message_filters, callback_filters, listener_type,
+                                      timeout, unallowed_click_alert, reply_parameters, user_id, message_id,
+                                      inline_message_id, **kwargs)
 
     @should_patch()
     async def ask_only(self,
                        text: str,
                        quote: bool | None = None,
+                       filters: Optional[Filter] = None, # New
                        message_filters: Optional[Filter] = None,
                        callback_filters: Optional[Filter] = None,
+                       listener_type: Union[ListenerTypes, List[ListenerTypes]] = ListenerTypes.MESSAGE,
                        timeout: Optional[int] = None,
                        unallowed_click_alert: bool = True,
+                       reply_parameters: "ReplyParameters" = None,
                        inline_message_id: Union[str, List[str]] = None,
                        **kwargs,
-                       ) -> _Message | CallbackQuery:
+                       ) -> Optional[Union[_Message, CallbackQuery]]:
 
-        return await self.ask(text, quote, message_filters, callback_filters, timeout, unallowed_click_alert,
-                              self.from_user.id, self.id, inline_message_id, **kwargs)
+        return await self.ask(text, quote, filters, message_filters, callback_filters, listener_type, timeout,
+                              unallowed_click_alert, reply_parameters, self.from_user.id, self.id,
+                              inline_message_id, **kwargs)
 
     @should_patch()
     async def ask_edit(
             self,
             text: str,
+            filters: Optional[Filter] = None,  # New
             message_filters: Optional[Filter] = None,
             callback_filters: Optional[Filter] = None,
+            listener_type: Union[ListenerTypes, List[ListenerTypes]] = ListenerTypes.MESSAGE,
             timeout: Optional[int] = None,
             unallowed_click_alert: bool = True,
             user_id: Union[Union[int, str], List[Union[int, str]]] = None,
@@ -103,32 +92,29 @@ class Message(_Message):
             inline_message_id: Union[str, List[str]] = None,
             *args,
             **kwargs,
-    ):
-
-        message_task = asyncio.create_task(
-            self._client.listen(message_filters, ListenerTypes.MESSAGE, timeout, unallowed_click_alert,
-                                self.chat.id, user_id, message_id, inline_message_id))
-        callback_task = asyncio.create_task(
-            self._client.listen(callback_filters, ListenerTypes.CALLBACK_QUERY, timeout, unallowed_click_alert,
-                                self.chat.id, user_id, message_id, inline_message_id))
+            ) -> Optional[Union[_Message, CallbackQuery]]:
 
         sent_message = None
         if text.strip() != "":
             sent_message = await self.edit_text(text, *args, **kwargs)
 
-        response, pending = await asyncio.wait([message_task, callback_task], timeout=timeout,
-                                               return_when=asyncio.FIRST_COMPLETED)
+        message_id = message_id if message_id else self.id
+        user_id = user_id if user_id else self.from_user.id
 
-        for task in pending:
-            task.cancel()
+        completed_result = await self._client._create_and_wait_for_listeners(
+            listener_type=listener_type,
+            filters=filters,
+            message_filters=message_filters,
+            callback_filters=callback_filters,
+            timeout=timeout,
+            unallowed_click_alert=unallowed_click_alert,
+            chat_id=self.chat.id,
+            user_id=user_id,
+            message_id=message_id,
+            inline_message_id=inline_message_id,
+        )
 
-        for completed_task in response:
-            completed_task = completed_task.result()
-            if isinstance(completed_task, _Message):
-                if completed_task:
-                    completed_task.sent_message = sent_message
-                return completed_task
-            elif isinstance(completed_task, CallbackQuery):
-                return completed_task
-            else:
-                raise RuntimeError("Unexpected update type received")
+        if isinstance(completed_result, _Message) and completed_result:
+            completed_result.sent_message = sent_message
+
+        return completed_result

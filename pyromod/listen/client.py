@@ -4,7 +4,7 @@ from typing import Optional, Callable, Dict, List, Union
 
 import pyrogram
 from pyrogram.filters import Filter
-from pyrogram.types import Message as _Message, CallbackQuery
+from pyrogram.types import Message as _Message, CallbackQuery, ReplyParameters
 
 from ..config import config
 from ..exceptions import ListenerTimeout, ListenerStopped
@@ -70,46 +70,106 @@ class Client(pyrogram.client.Client):
                 raise ListenerTimeout(timeout)
 
     @should_patch()
-    async def ask(self,
-                  chat_id: Union[Union[int, str], List[Union[int, str]]],
-                  text: str,
-                  message_filters: Optional[Filter] = None,
-                  callback_filters: Optional[Filter] = None,
-                  timeout: Optional[int] = None,
-                  unallowed_click_alert: bool = True,
-                  user_id: Union[Union[int, str], List[Union[int, str]]] = None,
-                  message_id: Union[int, List[int]] = None,
-                  inline_message_id: Union[str, List[str]] = None,
-                  **kwargs,
-                  ) -> _Message | CallbackQuery:
+    async def _create_and_wait_for_listeners(
+            self,
+            listener_type: Union[ListenerTypes, List[ListenerTypes]],
+            filters: Optional[Filter] = None,
+            message_filters: Optional[Filter] = None,
+            callback_filters: Optional[Filter] = None,
+            timeout: Optional[int] = None,
+            unallowed_click_alert: bool = True,
+            chat_id: Union[Union[int, str], List[Union[int, str]]] = None,
+            user_id: Union[Union[int, str], List[Union[int, str]]] = None,
+            message_id: Union[int, List[int]] = None,
+            inline_message_id: Union[str, List[str]] = None,
+            ) -> Optional[Union[_Message, CallbackQuery]]:
 
-        message_task = asyncio.create_task(
-            self.listen(message_filters, ListenerTypes.MESSAGE, timeout, unallowed_click_alert,
-                        chat_id, user_id, message_id, inline_message_id))
-        callback_task = asyncio.create_task(
-            self.listen(callback_filters, ListenerTypes.CALLBACK_QUERY, timeout, unallowed_click_alert,
-                        chat_id, user_id, message_id, inline_message_id))
+        is_multi_listener = (isinstance(listener_type, list) and
+                             (ListenerTypes.MESSAGE in listener_type) and
+                             (ListenerTypes.CALLBACK_QUERY in listener_type))
 
-        sent_message = None
-        if text.strip() != "":
-            chat_to_ask = chat_id[0] if isinstance(chat_id, list) else chat_id
-            sent_message = await self.send_message(chat_to_ask, text, **kwargs)
+        if is_multi_listener:
+            message_task = asyncio.create_task(
+                self.listen(message_filters, ListenerTypes.MESSAGE, timeout, unallowed_click_alert,
+                              chat_id, user_id, message_id, inline_message_id))
+            callback_task = asyncio.create_task(
+                self.listen(callback_filters, ListenerTypes.CALLBACK_QUERY, timeout, unallowed_click_alert,
+                              chat_id, user_id, message_id, inline_message_id))
 
-        response, pending = await asyncio.wait([message_task, callback_task], timeout=timeout,
+            response_tasks = [message_task, callback_task]
+
+        else:
+            single_listener = listener_type[0] if isinstance(listener_type, list) else listener_type
+
+            final_filters = filters
+            if final_filters is None:
+                if single_listener == ListenerTypes.MESSAGE:
+                    final_filters = message_filters
+                elif single_listener == ListenerTypes.CALLBACK_QUERY:
+                    final_filters = callback_filters
+
+            single_task = asyncio.create_task(
+                self.listen(final_filters, single_listener, timeout, unallowed_click_alert,
+                              chat_id, user_id, message_id, inline_message_id))
+
+            response_tasks = [single_task]
+
+        response, pending = await asyncio.wait(response_tasks, timeout=timeout,
                                                return_when=asyncio.FIRST_COMPLETED)
+
         for task in pending:
             task.cancel()
 
         for completed_task in response:
-            completed_task = completed_task.result()
-            if isinstance(completed_task, _Message):
-                if completed_task:
-                    completed_task.sent_message = sent_message
-                return completed_task
-            elif isinstance(completed_task, CallbackQuery):
-                return completed_task
-            else:
-                raise RuntimeError("Unexpected update type received")
+            completed_result = completed_task.result()
+
+            if completed_result:
+                if isinstance(completed_result, (_Message, CallbackQuery)):
+                    return completed_result
+                else:
+                    raise RuntimeError("Unexpected update type received")
+
+        return None
+
+    @should_patch()
+    async def ask(self,
+                  chat_id: Union[Union[int, str], List[Union[int, str]]],
+                  text: str,
+                  filters: Optional[Filter] = None,
+                  message_filters: Optional[Filter] = None,
+                  callback_filters: Optional[Filter] = None,
+                  listener_type: Union[ListenerTypes, List[ListenerTypes]] = ListenerTypes.MESSAGE,
+                  timeout: Optional[int] = None,
+                  unallowed_click_alert: bool = True,
+                  reply_parameters: ReplyParameters = None,
+                  user_id: Union[Union[int, str], List[Union[int, str]]] = None,
+                  message_id: Union[int, List[int]] = None,
+                  inline_message_id: Union[str, List[str]] = None,
+                  **kwargs,
+                  ) -> Optional[Union[_Message, CallbackQuery]]:
+
+        sent_message = None
+        if text.strip() != "":
+            chat_to_ask = chat_id[0] if isinstance(chat_id, list) else chat_id
+            sent_message = await self.send_message(chat_to_ask, text, reply_parameters=reply_parameters, **kwargs)
+
+        completed_result = await self._create_and_wait_for_listeners(
+            listener_type=listener_type,
+            filters=filters,
+            message_filters=message_filters,
+            callback_filters=callback_filters,
+            timeout=timeout,
+            unallowed_click_alert=unallowed_click_alert,
+            chat_id=chat_id,
+            user_id=user_id,
+            message_id=message_id,
+            inline_message_id=inline_message_id,
+        )
+
+        if isinstance(completed_result, _Message) and completed_result:
+            completed_result.sent_message = sent_message
+
+        return completed_result
 
     @should_patch()
     def remove_listener(self, listener: Listener):
